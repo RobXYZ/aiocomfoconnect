@@ -18,6 +18,7 @@ black = "^24.4.0"
 isort = "^5.10.1"
 pylint = "^3.2"
 pytest = "^8.2.0"
+pytest-asyncio = "^0.23.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -79,3 +80,11 @@ enable = [
     #"useless-suppression",  # temporarily every now and then to clean them up
     "use-symbolic-message-instead",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = "-v --tb=short"

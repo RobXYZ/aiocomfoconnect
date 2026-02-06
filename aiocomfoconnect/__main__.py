@@ -9,7 +9,7 @@ import sys
 from asyncio import Future
 from typing import Literal
 
-from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID
+from aiocomfoconnect import DEFAULT_NAME, DEFAULT_PIN, DEFAULT_UUID, Bridge
 from aiocomfoconnect.comfoconnect import ComfoConnect
 from aiocomfoconnect.discovery import discover_bridges
 from aiocomfoconnect.exceptions import (
@@ -83,36 +83,36 @@ async def run_register(host: str, uuid: str, name: str, pin: int):
     if not bridges:
         raise BridgeNotFoundException("No bridge found")
 
-    # Connect to the bridge
-    comfoconnect = ComfoConnect(bridges[0].host, bridges[0].uuid)
+    # Use the low-level bridge API here so we can register even when
+    # StartSession does not reply for unregistered UUIDs.
+    bridge = Bridge(bridges[0].host, bridges[0].uuid)
 
+    await bridge.connect(uuid)
     try:
-        # Login with the bridge
-        await comfoconnect.connect(uuid)
-        print(f"UUID {uuid} is already registered.")
-
-    except ComfoConnectNotAllowed:
-        # We probably are not registered yet...
         try:
-            await comfoconnect.cmd_register_app(uuid, name, pin)
-        except ComfoConnectNotAllowed:
-            await comfoconnect.disconnect()
-            print("Registration failed. Please check the PIN.")
-            sys.exit(1)
+            await bridge.cmd_start_session(True)
+            print(f"UUID {uuid} is already registered.")
+        except (ComfoConnectNotAllowed, AioComfoConnectTimeout):
+            # We probably are not registered yet...
+            try:
+                await bridge.cmd_register_app(uuid, name, pin)
+            except ComfoConnectNotAllowed:
+                print("Registration failed. Please check the PIN.")
+                sys.exit(1)
 
-        print(f"UUID {uuid} is now registered.")
+            print(f"UUID {uuid} is now registered.")
 
-        # Connect to the bridge
-        await comfoconnect.cmd_start_session(True)
+            # Start a session after successful registration.
+            await bridge.cmd_start_session(True)
 
-    # ListRegisteredApps
-    print()
-    print("Registered applications:")
-    reply = await comfoconnect.cmd_list_registered_apps()
-    for app in reply.apps:
-        print(f"* {app.uuid.hex()}: {app.devicename}")
-
-    await comfoconnect.disconnect()
+        # ListRegisteredApps
+        print()
+        print("Registered applications:")
+        reply = await bridge.cmd_list_registered_apps()
+        for app in reply.apps:
+            print(f"* {app.uuid.hex()}: {app.devicename}")
+    finally:
+        await bridge.disconnect()
 
 
 async def run_deregister(host: str, uuid: str, uuid2: str):
